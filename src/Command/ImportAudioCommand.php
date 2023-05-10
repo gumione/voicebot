@@ -24,6 +24,8 @@ class ImportAudioCommand extends Command {
     // ...
 
     protected function execute(InputInterface $input, OutputInterface $output) {
+		
+		$audioDirectory = $this->projectDir . '/public/audio';
         // Configure the Finder object to search for audio files in the specified directory
 		$finder = new Finder();
 		$finder->files()->in($audioDirectory)->name('/\.(mp3|wav|ogg|m4a)$/i');
