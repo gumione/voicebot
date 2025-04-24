@@ -1,92 +1,81 @@
 <?php
 
+// src/Entity/Audio.php
+
 namespace App\Entity;
 
 use Doctrine\ORM\Mapping as ORM;
 
-/**
- * @ORM\Table(name="audio", indexes={@ORM\Index(columns={"title"}, flags={"fulltext"})})
- * @ORM\Entity(repositoryClass="App\Repository\AudioRepository")
- */
-class Audio
-{
-    /**
-     * @ORM\Id
-     * @ORM\GeneratedValue
-     * @ORM\Column(type="integer")
-     */
-    private $id;
+#[ORM\Entity(repositoryClass: 'App\Repository\AudioRepository')]
+#[ORM\Table(name: 'audio')]
+class Audio {
 
-    /**
-     * @ORM\Column(type="string", length=255)
-     */
-    private $title;
+    #[ORM\Id]
+    #[ORM\GeneratedValue]
+    #[ORM\Column(type: 'integer')]
+    private ?int $id = null;
 
-    /**
-     * @ORM\Column(type="text")
-     */
-    private $path;
+    #[ORM\Column(length: 255)]
+    private string $title;
 
-    /**
-     * @ORM\Column(type="text", nullable=true)
-     */
-    private $tags;
-    
-    /**
-     * @ORM\Column(type="string", length=255, nullable=true)
-     */
-    private $file_id;
+    #[ORM\Column(length: 255)]
+    private string $artist;
 
-    public function getId(): ?int
-    {
+    #[ORM\Column(type: 'text')]
+    private string $path;
+
+    #[ORM\Column(type: 'text', nullable: true)]
+    private ?string $tags = null;
+
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $fileId = null;
+
+    public function getId(): ?int {
         return $this->id;
     }
 
-    public function getTitle(): ?string
-    {
+    public function getTitle(): string {
         return $this->title;
     }
 
-    public function setTitle(string $title): self
-    {
-        $this->title = $title;
+    public function getArtist(): string {
+        return $this->artist;
+    }
 
+    public function setTitle(string $t): self {
+        $this->title = $t;
         return $this;
     }
 
-    public function getPath(): ?string
-    {
+    public function setArtist(string $a): self {
+        $this->artist = $a;
+        return $this;
+    }
+
+    public function getPath(): string {
         return $this->path;
     }
 
-    public function setPath(string $path): self
-    {
-        $this->path = $path;
-
+    public function setPath(string $p): self {
+        $this->path = $p;
         return $this;
     }
 
-    public function getTags(): ?string
-    {
+    public function getTags(): ?string {
         return $this->tags;
     }
 
-    public function setTags(?string $tags): self
-    {
-        $this->tags = $tags;
-
+    public function setTags(?string $t): self {
+        $this->tags = $t;
         return $this;
     }
-    
-    public function getFileId(): ?string
-    {
-        return $this->file_id;
+
+    public function getFileId(): ?string {
+        return $this->fileId;
     }
 
-    public function setFileId(?string $file_id): self
-    {
-        $this->file_id = $file_id;
-
+    public function setFileId(?string $id): self {
+        $this->fileId = $id;
         return $this;
     }
 }

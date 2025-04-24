@@ -1,0 +1,39 @@
+{% extends 'base.html.twig' %}
+
+{% block body %}
+<h2>Inline-debug</h2>
+
+<form method="post" class="mb-3">
+  <div class="input-group">
+    <input type="text" name="q" value="{{ query }}" class="form-control" placeholder="Введите текст как в Telegram…">
+    <button class="btn btn-primary">Поиск</button>
+  </div>
+</form>
+
+{% if results is not empty %}
+  <table class="table table-sm table-striped">
+    <thead><tr><th>#</th><th>Artist</th><th>Title</th><th>file_id</th></tr></thead>
+    <tbody>
+      {% for a in results %}
+        <tr>
+          <td>{{ loop.index + page*50 }}</td>
+          <td>{{ a.artist }}</td>
+          <td>{{ a.title }}</td>
+          <td>{{ a.fileId ?: '—' }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <nav>
+    {% if hasPrev %}
+      <a class="btn btn-outline-secondary" href="?page={{ page-1 }}{% if query %}&q={{ query|url_encode }}{% endif %}">&laquo; Prev</a>
+    {% endif %}
+    {% if hasNext %}
+      <a class="btn btn-outline-secondary" href="?page={{ page+1 }}{% if query %}&q={{ query|url_encode }}{% endif %}">Next &raquo;</a>
+    {% endif %}
+  </nav>
+{% elseif query %}
+  <p class="alert alert-warning">Ничего не найдено.</p>
+{% endif %}
+{% endblock %}

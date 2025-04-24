@@ -1,63 +1,53 @@
 <?php
-
 namespace App\Repository;
 
 use App\Entity\Audio;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
-class AudioRepository extends ServiceEntityRepository {
-
-    public function __construct(ManagerRegistry $registry) {
-        parent::__construct($registry, Audio::class);
+final class AudioRepository extends ServiceEntityRepository
+{
+    public function __construct(ManagerRegistry $r)
+    {
+        parent::__construct($r, Audio::class);
     }
 
-    public function findByTitleWithKeyword(string $keyword, $limit = null, $offset = null) {
-        $keywords = explode(' ', $keyword);
-        $parameters = [];
+    /** FULLTEXT n-gram поиск в NATURAL LANGUAGE MODE (устойчив к опечаткам) */
+    public function search(string $text, int $limit, int $offset): array
+    {
+        $q = trim($text);                       // без звёздочек, без дополнительных токенов
 
-        $qb = $this->createQueryBuilder('a');
-        $i = 0;
-
-        foreach ($keywords as $word) {
-            $qb->addSelect("LEVENSHTEIN(a.title, :word{$i}) AS HIDDEN lev{$i}")
-                    ->andWhere("LOCATE(:word{$i}, a.title) > 0 OR SOUNDEX(a.title) = SOUNDEX(:word{$i})");
-            $parameters["word{$i}"] = $word;
-            $i++;
-        }
-
-        $qb->setMaxResults($limit)
-                ->setFirstResult($offset)
-                ->setParameters($parameters)
-                ->orderBy("lev0", 'ASC');
-
-        return $qb->getQuery()->getResult();
-    }
-
-    public function countByTitleWithKeyword(string $keyword) {
-        $keywords = explode(' ', $keyword);
-        $parameters = [];
-
-        $qb = $this->createQueryBuilder('a')
-                ->select('count(a.id)');
-        $i = 0;
-
-        foreach ($keywords as $word) {
-            $qb->andWhere("LOCATE(:word{$i}, a.title) > 0 OR SOUNDEX(a.title) = SOUNDEX(:word{$i})");
-            $parameters["word{$i}"] = $word;
-            $i++;
-        }
-
-        $qb->setParameters($parameters);
-
-        return $qb->getQuery()->getSingleScalarResult();
-    }
-
-    public function countAll() {
         return $this->createQueryBuilder('a')
-                        ->select('count(a.id)')
-                        ->getQuery()
-                        ->getSingleScalarResult();
+            ->addSelect('MATCH_AGAINST_NL(a.title, a.artist, :q) AS HIDDEN score')
+            ->where('MATCH_AGAINST_NL(a.title, a.artist, :q) > 0')
+            ->setParameter('q', $q)
+            ->orderBy('score', 'DESC')
+            ->setFirstResult($offset)
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getResult();
     }
 
+    public function countSearch(string $text): int
+    {
+        $q = trim($text);
+
+        return (int) $this->createQueryBuilder('a')
+            ->select('COUNT(a.id)')
+            ->where('MATCH_AGAINST_NL(a.title, a.artist, :q) > 0')
+            ->setParameter('q', $q)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
+    /** fallback – вся база постранично */
+    public function findAllPaginated(int $limit, int $offset): array
+    {
+        return $this->createQueryBuilder('a')
+            ->orderBy('a.title')
+            ->setFirstResult($offset)
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getResult();
+    }
 }

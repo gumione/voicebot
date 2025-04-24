@@ -1,6 +1,20 @@
 monolog:
-    channels:
-        - deprecation # Deprecations are logged in the dedicated "deprecation" channel when it exists
+  channels: ['telegram', 'ffmpeg']
+  handlers:
+    main:
+      type: stream
+      path: "%kernel.logs_dir%/%kernel.environment%.log"
+      level: info
+    telegram:
+      type: stream
+      path: "%kernel.logs_dir%/telegram.log"
+      level: debug
+      channels: ['telegram']
+    ffmpeg:
+      type: stream
+      path: "%kernel.logs_dir%/ffmpeg.log"
+      level: debug
+      channels: ['ffmpeg']
 
 when@dev:
     monolog:

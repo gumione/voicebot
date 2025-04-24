@@ -1,95 +1,64 @@
 <?php
 
-// src/Entity/User.php
-
 namespace App\Entity;
 
 use Doctrine\ORM\Mapping as ORM;
 
-/**
- * @ORM\Entity(repositoryClass="App\Repository\UserRepository")
- */
-class User
-{
-    /**
-     * @ORM\Id
-     * @ORM\GeneratedValue
-     * @ORM\Column(type="integer")
-     */
-    private $id;
+#[ORM\Entity(repositoryClass: 'App\Repository\UserRepository')]
+#[ORM\Table(name: 'user')]
+#[ORM\UniqueConstraint(name: 'uniq_telegram', columns: ['telegram_id'])]
+class User {
 
-    /**
-     * @ORM\Column(type="string", length=255, nullable=true)
-     */
-    private $username;
+    #[ORM\Id, ORM\GeneratedValue, ORM\Column(type: 'integer')]
+    private ?int $id = null;
 
-    /**
-     * @ORM\Column(type="string", length=255, nullable=true)
-     */
-    private $firstName;
+    #[ORM\Column(length: 255, nullable: true)] private ?string $username = null;
 
-    /**
-     * @ORM\Column(type="string", length=255, nullable=true)
-     */
-    private $lastName;
-    
-    /**
-     * @ORM\Column(type="integer", nullable=true)
-     */
-    private $telegramId;
+    #[ORM\Column(length: 255, nullable: true)] private ?string $firstName = null;
 
-    public function getId(): ?int
-    {
-        return $this->id;
+    #[ORM\Column(length: 255, nullable: true)] private ?string $lastName = null;
+
+    #[ORM\Column(type: 'integer', nullable: true)] private ?int $telegramId = null;
+
+    /* getters / setters */
+
+    public function getId(): ?int {
+        return $id;
     }
 
-    public function getUsername(): ?string
-    {
+    public function getUsername(): ?string {
         return $this->username;
     }
 
-    public function setUsername(?string $username): self
-    {
-        $this->username = $username;
-
+    public function setUsername(?string $u): self {
+        $this->username = $u;
         return $this;
     }
 
-    public function getFirstName(): ?string
-    {
+    public function getFirstName(): ?string {
         return $this->firstName;
     }
 
-    public function setFirstName(?string $firstName): self
-    {
-        $this->firstName = $firstName;
-
+    public function setFirstName(?string $f): self {
+        $this->firstName = $f;
         return $this;
     }
 
-    public function getLastName(): ?string
-    {
+    public function getLastName(): ?string {
         return $this->lastName;
     }
 
-    public function setLastName(?string $lastName): self
-    {
-        $this->lastName = $lastName;
-
+    public function setLastName(?string $l): self {
+        $this->lastName = $l;
         return $this;
     }
-    
-    public function setId (?int $id): self
-    {
-        $this->id = $id;
-        
-        return $this;
-    }
-    
-    public function setTelegramId(?int $telegramId): self
-    {
-        $this->telegramId = $telegramId;
 
+    public function getTelegramId(): ?int {
+        return $this->telegramId;
+    }
+
+    public function setTelegramId(?int $id): self {
+        $this->telegramId = $id;
         return $this;
     }
 }

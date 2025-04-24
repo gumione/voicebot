@@ -10,12 +10,10 @@ doctrine:
     orm:
         dql:
             string_functions:
-                LEVENSHTEIN: App\DoctrineExtensions\LevenshteinFunction
                 least: DoctrineExtensions\Query\Mysql\Least
                 greatest: DoctrineExtensions\Query\Mysql\Greatest
-                MATCH: DoctrineExtensions\Query\Mysql\MatchAgainst
-                MATCH_AGAINST: DoctrineExtensions\Query\Mysql\MatchAgainst
-                SOUNDEX: DoctrineExtensions\Query\Mysql\Soundex
+                MATCH_AGAINST: App\DoctrineExtensions\MatchAgainstFunction
+                MATCH_AGAINST_NL: App\DoctrineExtensions\MatchAgainstNlFunction
         auto_generate_proxy_classes: true
         enable_lazy_ghost_objects: true
         naming_strategy: doctrine.orm.naming_strategy.underscore_number_aware
