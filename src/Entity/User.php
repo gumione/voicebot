@@ -2,6 +2,7 @@
 
 namespace App\Entity;
 
+use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity(repositoryClass: 'App\Repository\UserRepository')]
@@ -18,12 +19,14 @@ class User {
 
     #[ORM\Column(length: 255, nullable: true)] private ?string $lastName = null;
 
-    #[ORM\Column(type: 'integer', nullable: true)] private ?int $telegramId = null;
+    // Telegram IDs already exceed 32-bit range, so this must be BIGINT.
+    // Doctrine hydrates BIGINT as string to stay safe on 32-bit PHP.
+    #[ORM\Column(type: Types::BIGINT, nullable: true)] private ?string $telegramId = null;
 
     /* getters / setters */
 
     public function getId(): ?int {
-        return $id;
+        return $this->id;
     }
 
     public function getUsername(): ?string {
@@ -53,12 +56,12 @@ class User {
         return $this;
     }
 
-    public function getTelegramId(): ?int {
+    public function getTelegramId(): ?string {
         return $this->telegramId;
     }
 
-    public function setTelegramId(?int $id): self {
-        $this->telegramId = $id;
+    public function setTelegramId(int|string|null $id): self {
+        $this->telegramId = $id === null ? null : (string) $id;
         return $this;
     }
 }

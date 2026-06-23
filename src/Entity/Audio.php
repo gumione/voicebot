@@ -21,7 +21,7 @@ class Audio {
     #[ORM\Column(length: 255)]
     private string $artist;
 
-    #[ORM\Column(type: 'text')]
+    #[ORM\Column(length: 1024)]
     private string $path;
 
     #[ORM\Column(type: 'text', nullable: true)]
