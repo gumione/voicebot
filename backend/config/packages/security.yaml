@@ -1,0 +1,46 @@
+security:
+    password_hashers:
+        App\Entity\AdminUser: 'auto'
+
+    providers:
+        admin_provider:
+            entity:
+                class: App\Entity\AdminUser
+                property: email
+
+    firewalls:
+        dev:
+            pattern: ^/(_profiler|_wdt)/
+            security: false
+        login:
+            pattern: ^/admin/api/login$
+            stateless: true
+            provider: admin_provider
+            json_login:
+                check_path: admin_login
+                username_path: email
+                password_path: password
+                success_handler: lexik_jwt_authentication.handler.authentication_success
+                failure_handler: lexik_jwt_authentication.handler.authentication_failure
+        api:
+            pattern: ^/admin/api
+            stateless: true
+            provider: admin_provider
+            jwt: ~
+        # Public: Telegram webhook (/bot/*) and the read-only public API (/api/*).
+        main:
+            lazy: true
+            security: false
+
+    access_control:
+        - { path: ^/admin/api/login, roles: PUBLIC_ACCESS }
+        - { path: ^/admin/api, roles: IS_AUTHENTICATED_FULLY }
+
+when@test:
+    security:
+        password_hashers:
+            App\Entity\AdminUser:
+                algorithm: auto
+                cost: 4
+                time_cost: 3
+                memory_cost: 10

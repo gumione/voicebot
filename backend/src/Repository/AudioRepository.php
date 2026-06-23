@@ -118,6 +118,27 @@ final class AudioRepository extends ServiceEntityRepository
         return (int) $qb->getQuery()->getSingleScalarResult();
     }
 
+    /**
+     * Admin listing for one bot: newest first, optional LIKE filter.
+     * @return array{items: Audio[], total: int}
+     */
+    public function adminPaginate(int $botId, int $page, int $perPage, string $search = ''): array
+    {
+        $base = $this->createQueryBuilder('a')
+            ->where('a.bot = :bot')->setParameter('bot', $botId);
+        if ($search !== '') {
+            $base->andWhere('a.title LIKE :s OR a.artist LIKE :s')->setParameter('s', '%'.$search.'%');
+        }
+
+        $total = (int) (clone $base)->select('COUNT(a.id)')->getQuery()->getSingleScalarResult();
+        $items = $base->orderBy('a.id', 'DESC')
+            ->setFirstResult(($page - 1) * $perPage)
+            ->setMaxResults($perPage)
+            ->getQuery()->getResult();
+
+        return ['items' => $items, 'total' => $total];
+    }
+
     /** @return Audio[] */
     public function findAllPaginated(int $limit, int $offset, ?int $botId = null): array
     {

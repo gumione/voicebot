@@ -6,6 +6,7 @@ services:
         bind:
             $telegramLogger: '@monolog.logger.telegram'
             $ffmpegLogger: '@monolog.logger.ffmpeg'
+            $debug: '%kernel.debug%'
 
     App\:
         resource: '../src/'
@@ -18,6 +19,10 @@ services:
             - '../src/Service/Telegram/TelegramService.php'
 
     App\Service\Telegram\VoiceSender:
+        arguments:
+            $publicDir: '%kernel.project_dir%/public'
+
+    App\Service\Admin\SampleService:
         arguments:
             $publicDir: '%kernel.project_dir%/public'
 
