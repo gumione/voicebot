@@ -111,4 +111,38 @@ final class AudioRepository extends ServiceEntityRepository
             ->getQuery()
             ->getResult();
     }
+
+    /**
+     * Lightweight rows for the in-PHP fuzzy fallback (id + searchable text).
+     * @return array<int, array{id:int, name:string}>
+     */
+    public function searchableRows(): array
+    {
+        return $this->createQueryBuilder('a')
+            ->select("a.id AS id, CONCAT(a.title, ' ', a.artist) AS name")
+            ->getQuery()
+            ->getArrayResult();
+    }
+
+    /**
+     * Hydrate the given ids preserving their order (Doctrine IN() does not).
+     * @param int[] $ids
+     * @return Audio[]
+     */
+    public function findByIdsOrdered(array $ids): array
+    {
+        if (!$ids) return [];
+        $rows = $this->createQueryBuilder('a')
+            ->where('a.id IN (:ids)')->setParameter('ids', $ids)
+            ->getQuery()->getResult();
+        $byId = [];
+        foreach ($rows as $a) {
+            $byId[$a->getId()] = $a;
+        }
+        $ordered = [];
+        foreach ($ids as $id) {
+            if (isset($byId[$id])) $ordered[] = $byId[$id];
+        }
+        return $ordered;
+    }
 }

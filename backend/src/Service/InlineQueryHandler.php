@@ -21,6 +21,7 @@ final class InlineQueryHandler
 
     public function __construct(
         private readonly AudioRepository $audioRepo,
+        private readonly SampleSearch    $sampleSearch,
         private readonly UserService     $userService,
         private readonly TelegramService $telegram, // guarantees Request:: is initialized
         #[\SensitiveParameter] private readonly LoggerInterface $telegramLogger, // channel "telegram"
@@ -41,9 +42,9 @@ final class InlineQueryHandler
 
         $this->userService->ensure($inlineQuery->getFrom());
 
-        /* ---------- Search ---------- */
+        /* ---------- Search (exact → layout → fuzzy) ---------- */
         if ($query !== '') {
-            $audios = $this->audioRepo->search($query, self::LIMIT, $offset);
+            $audios = $this->sampleSearch->search($query, self::LIMIT, $offset);
         } else {
             $audios = $this->audioRepo->findAllPaginated(self::LIMIT, $offset);
         }
