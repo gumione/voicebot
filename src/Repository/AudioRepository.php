@@ -12,35 +12,96 @@ final class AudioRepository extends ServiceEntityRepository
         parent::__construct($r, Audio::class);
     }
 
-    /** FULLTEXT n-gram поиск в NATURAL LANGUAGE MODE (устойчив к опечаткам) */
-    public function search(string $text, int $limit, int $offset): array
+    /** Поиск с фильтром “#Автор” + опечатки ±1 символ */
+    public function search(string $raw, int $limit, int $offset): array
     {
-        $q = trim($text);                       // без звёздочек, без дополнительных токенов
+        $raw = trim($raw);
 
-        return $this->createQueryBuilder('a')
-            ->addSelect('MATCH_AGAINST_NL(a.title, a.artist, :q) AS HIDDEN score')
-            ->where('MATCH_AGAINST_NL(a.title, a.artist, :q) > 0')
-            ->setParameter('q', $q)
+        /* --- автор через # --- */
+        $artist = null;
+        if (preg_match('/#([^#]+?)(?:\s|$)/u', $raw, $m)) {
+            $artist = trim($m[1]);                 // «Дядя Саша»
+            $raw    = trim(str_replace($m[0], '', $raw));
+        }
+
+        /* --- токены для BOOLEAN-поиска --- */
+        $tokens = $raw === '' ? [] : preg_split('/\s+/', $raw);
+        $bool   = implode(' ', array_map(fn($t) => '+' . $t . '*', $tokens));
+
+        /* ---------- ЭТАП 1 : BOOLEAN MODE ----------- */
+        $qb = $this->createQueryBuilder('a')
+            ->addSelect('MATCH_AGAINST_BOOL(a.title, a.artist, :bq) AS HIDDEN score')
+            ->setParameter('bq', $bool ?: '')
             ->orderBy('score', 'DESC')
             ->setFirstResult($offset)
-            ->setMaxResults($limit)
-            ->getQuery()
-            ->getResult();
+            ->setMaxResults($limit);
+
+        if ($artist) {
+            $qb->andWhere('a.artist LIKE :art')->setParameter('art', "%$artist%");
+        }
+        if ($bool) {
+            $qb->andWhere('MATCH_AGAINST_BOOL(a.title, a.artist, :bq) > 0');
+        }
+
+        $results = $qb->getQuery()->getResult();
+
+        /* если что-то нашли или paginated – возвращаем */
+        if ($results || $offset || $bool === '') {
+            return $results;
+        }
+
+        /* ---------- ЭТАП 2 : NATURAL (fallback) ------ */
+        $qb = $this->createQueryBuilder('a')
+            ->addSelect('MATCH_AGAINST_NL(a.title, a.artist, :nq) AS HIDDEN score')
+            ->where('MATCH_AGAINST_NL(a.title, a.artist, :nq) > 0')
+            ->setParameter('nq', $raw)
+            ->orderBy('score', 'DESC')
+            ->setFirstResult($offset)
+            ->setMaxResults($limit);
+
+        if ($artist) {
+            $qb->andWhere('a.artist LIKE :art')->setParameter('art', "%$artist%");
+        }
+
+        return $qb->getQuery()->getResult();
     }
 
-    public function countSearch(string $text): int
+    public function countSearch(string $raw): int
     {
-        $q = trim($text);
+        $artist = null;
+        if (preg_match('/#([^#]+?)(?:\s|$)/u', $raw, $m)) {
+            $artist = trim($m[1]);
+            $raw    = trim(str_replace($m[0], '', $raw));
+        }
 
-        return (int) $this->createQueryBuilder('a')
-            ->select('COUNT(a.id)')
-            ->where('MATCH_AGAINST_NL(a.title, a.artist, :q) > 0')
-            ->setParameter('q', $q)
-            ->getQuery()
-            ->getSingleScalarResult();
+        $tokens = $raw === '' ? [] : preg_split('/\s+/', $raw);
+        $bool   = implode(' ', array_map(fn($t) => '+' . $t . '*', $tokens));
+
+        /* primary count */
+        $qb = $this->createQueryBuilder('a')->select('COUNT(a.id)');
+        if ($bool) {
+            $qb->where('MATCH_AGAINST_BOOL(a.title, a.artist, :bq) > 0')
+               ->setParameter('bq', $bool);
+        }
+        if ($artist) {
+            $qb->andWhere('a.artist LIKE :art')->setParameter('art', "%$artist%");
+        }
+        $cnt = (int)$qb->getQuery()->getSingleScalarResult();
+        if ($cnt || $bool === '') {
+            return $cnt;
+        }
+
+        /* fallback count */
+        $qb = $this->createQueryBuilder('a')->select('COUNT(a.id)')
+            ->where('MATCH_AGAINST_NL(a.title, a.artist, :nq) > 0')
+            ->setParameter('nq', $raw);
+        if ($artist) {
+            $qb->andWhere('a.artist LIKE :art')->setParameter('art', "%$artist%");
+        }
+
+        return (int)$qb->getQuery()->getSingleScalarResult();
     }
 
-    /** fallback – вся база постранично */
     public function findAllPaginated(int $limit, int $offset): array
     {
         return $this->createQueryBuilder('a')
