@@ -1,12 +1,13 @@
 # config/services.yaml
-parameters:
-    telegram_bot_api_key: '7595625943:AAHPQqrN7A24x-aiSYPVHx-jnaMTWLtBfhw'
-    telegram_bot_username: 'vlogkntntbot'
-
 services:
     _defaults:
         autowire: true
         autoconfigure: true
+        bind:
+            $telegramLogger: '@monolog.logger.telegram'
+            $ffmpegLogger: '@monolog.logger.ffmpeg'
+            $webhookSecret: '%env(TELEGRAM_WEBHOOK_SECRET)%'
+            $storageChatId: '%env(int:TELEGRAM_STORAGE_CHAT_ID)%'
 
     App\:
         resource: '../src/'
@@ -15,27 +16,15 @@ services:
             - '../src/Entity/'
             - '../src/Kernel.php'
 
-    App\Service\Telegram\RequestInitializer: ~
     App\Service\Telegram\TelegramService:
         arguments:
-            $apiKey: '%telegram_bot_api_key%'
-            $botName: '%telegram_bot_username%'
+            $apiKey: '%env(TELEGRAM_BOT_TOKEN)%'
+            $botName: '%env(TELEGRAM_BOT_USERNAME)%'
 
     App\Service\Telegram\VoiceSender:
         arguments:
             $publicDir: '%kernel.project_dir%/public'
-            $ffmpegLogger: '@monolog.logger.ffmpeg'
-
-    App\Service\Telegram\UserService:
-        arguments:
-            $telegramLogger: '@monolog.logger.telegram'
-
-    App\Service\InlineQueryHandler:
-        arguments:
-            $telegramLogger: '@monolog.logger.telegram'
 
     App\Command\ImportAudioCommand:
         arguments:
-            - '@Doctrine\ORM\EntityManagerInterface'
-            - '%kernel.project_dir%'
-        tags: ['console.command']
+            $projectDir: '%kernel.project_dir%'
