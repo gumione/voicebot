@@ -11,6 +11,11 @@ final class DebugInlineController extends AbstractController
     #[Route('/debug/inline', name: 'debug_inline', methods: ['GET','POST'])]
     public function __invoke(Request $req, AudioRepository $repo)
     {
+        // Debug-only surface — never expose it in prod.
+        if ($this->getParameter('kernel.environment') !== 'dev') {
+            throw $this->createNotFoundException();
+        }
+
         $query  = trim($req->request->get('q', ''));
         $page   = max(0, (int)$req->query->get('page', 0));
         $limit  = 50;
