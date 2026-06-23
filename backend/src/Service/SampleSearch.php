@@ -20,12 +20,12 @@ final class SampleSearch
     ) {}
 
     /** @return Audio[] */
-    public function search(string $query, int $limit, int $offset): array
+    public function search(string $query, int $limit, int $offset, ?int $botId = null): array
     {
         $query = trim($query);
 
         // 1) Exact FULLTEXT (also handles the "#artist" filter + boolean/natural).
-        $exact = $this->repo->search($query, $limit, $offset);
+        $exact = $this->repo->search($query, $limit, $offset, $botId);
         if ($exact || $query === '' || $offset > 0) {
             return $exact;
         }
@@ -33,14 +33,14 @@ final class SampleSearch
         // 2) Wrong keyboard layout (Latin typed in RU layout) → retry exact.
         $swapped = $this->fuzzy->swapLayout($query);
         if ($swapped !== null) {
-            $alt = $this->repo->search($swapped, $limit, 0);
+            $alt = $this->repo->search($swapped, $limit, 0, $botId);
             if ($alt) {
                 return $alt;
             }
         }
 
         // 3) Typo-tolerant fuzzy over the catalog (page-0 only).
-        $ids = $this->fuzzy->match($query, $this->repo->searchableRows());
+        $ids = $this->fuzzy->match($query, $this->repo->searchableRows($botId));
         if (!$ids) {
             return [];
         }

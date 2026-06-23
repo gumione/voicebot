@@ -11,10 +11,23 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Index(name: 'idx_audio_title_artist', columns: ['title', 'artist'], flags: ['fulltext'])]
 class Audio {
 
+    public const STATUS_PENDING = 'pending';
+    public const STATUS_READY   = 'ready';
+    public const STATUS_FAILED  = 'failed';
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column(type: 'integer')]
     private ?int $id = null;
+
+    /** Owning tenant. Nullable only so pre-multitenancy rows stay valid until migrated. */
+    #[ORM\ManyToOne(targetEntity: Bot::class, inversedBy: 'audios')]
+    #[ORM\JoinColumn(name: 'bot_id', nullable: true, onDelete: 'CASCADE')]
+    private ?Bot $bot = null;
+
+    /** Warming state: pending → ready (file_id set) | failed. */
+    #[ORM\Column(length: 16, options: ['default' => 'pending'])]
+    private string $status = self::STATUS_PENDING;
 
     #[ORM\Column(length: 255)]
     private string $title;
@@ -77,6 +90,24 @@ class Audio {
 
     public function setFileId(?string $id): self {
         $this->fileId = $id;
+        return $this;
+    }
+
+    public function getBot(): ?Bot {
+        return $this->bot;
+    }
+
+    public function setBot(?Bot $bot): self {
+        $this->bot = $bot;
+        return $this;
+    }
+
+    public function getStatus(): string {
+        return $this->status;
+    }
+
+    public function setStatus(string $status): self {
+        $this->status = $status;
         return $this;
     }
 }

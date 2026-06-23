@@ -6,8 +6,6 @@ services:
         bind:
             $telegramLogger: '@monolog.logger.telegram'
             $ffmpegLogger: '@monolog.logger.ffmpeg'
-            $webhookSecret: '%env(TELEGRAM_WEBHOOK_SECRET)%'
-            $storageChatId: '%env(int:TELEGRAM_STORAGE_CHAT_ID)%'
 
     App\:
         resource: '../src/'
@@ -15,11 +13,9 @@ services:
             - '../src/DependencyInjection/'
             - '../src/Entity/'
             - '../src/Kernel.php'
-
-    App\Service\Telegram\TelegramService:
-        arguments:
-            $apiKey: '%env(TELEGRAM_BOT_TOKEN)%'
-            $botName: '%env(TELEGRAM_BOT_USERNAME)%'
+            - '../src/Message/'
+            # built per-bot by TelegramClientFactory, not a container service
+            - '../src/Service/Telegram/TelegramService.php'
 
     App\Service\Telegram\VoiceSender:
         arguments:

@@ -1,28 +1,34 @@
 <?php
-// src/Command/ImportAudioCommand.php
+
+declare(strict_types=1);
 
 namespace App\Command;
 
 use App\Entity\Audio;
-use App\Service\Telegram\VoiceSender;
+use App\Entity\Bot;
+use App\Message\WarmAudioMessage;
+use App\Repository\BotRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\Finder\Finder;
+use Symfony\Component\Messenger\MessageBusInterface;
 
 #[AsCommand(
     name: 'app:import-audio',
-    description: 'Импортирует public/audio/** (artist = имя папки) и прогревает file_id',
+    description: 'Импортирует сэмплы бота и ставит их в очередь на прогрев file_id',
 )]
 final class ImportAudioCommand extends Command
 {
     public function __construct(
         private readonly EntityManagerInterface $em,
-        private readonly VoiceSender            $voiceSender,
+        private readonly BotRepository          $bots,
+        private readonly MessageBusInterface    $bus,
         private readonly string                 $projectDir,
     ) {
         parent::__construct();
@@ -30,51 +36,65 @@ final class ImportAudioCommand extends Command
 
     protected function configure(): void
     {
-        $this->addOption('no-warm', null, InputOption::VALUE_NONE, 'Не заливать file_id в Telegram после импорта');
+        $this->addArgument('bot', InputArgument::REQUIRED, 'Bot id or username')
+             ->addOption('no-warm', null, InputOption::VALUE_NONE, 'Не ставить в очередь на прогрев');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $io = new SymfonyStyle($input, $output);
-
-        $imported = $this->import($io);
-        $io->success(sprintf('Импорт завершён, новых записей: %d.', $imported));
-
-        if ($input->getOption('no-warm')) {
-            return self::SUCCESS;
+        $io  = new SymfonyStyle($input, $output);
+        $bot = $this->resolveBot((string) $input->getArgument('bot'));
+        if (!$bot) {
+            $io->error('Bot not found (pass an id or username).');
+            return Command::FAILURE;
         }
 
-        if (!$this->voiceSender->isConfigured()) {
-            $io->warning('TELEGRAM_STORAGE_CHAT_ID не задан — пропускаю прогрев file_id.');
-            return self::SUCCESS;
+        // Per-bot folder if present, otherwise the shared audio root.
+        $publicAudio = $this->projectDir.'/public/audio';
+        $perBot      = $publicAudio.'/'.$bot->getUsername();
+        $scanDir     = is_dir($perBot) ? $perBot : $publicAudio;
+        $prefix      = is_dir($perBot) ? 'audio/'.$bot->getUsername() : 'audio';
+
+        if (!is_dir($scanDir)) {
+            $io->error("Directory not found: $scanDir");
+            return Command::FAILURE;
         }
 
-        $this->warmFileIds($io);
+        $new = $this->import($io, $bot, $scanDir, $prefix);
+        $io->success(sprintf('Импорт "%s": новых записей %d.', $bot->getUsername(), count($new)));
 
-        return self::SUCCESS;
+        if ($input->getOption('no-warm') || !$new) {
+            return Command::SUCCESS;
+        }
+        if (!$bot->getStorageChatId()) {
+            $io->warning('У бота не задан storage_chat_id — прогрев пропущен (задайте и запустите снова).');
+            return Command::SUCCESS;
+        }
+
+        foreach ($new as $id) {
+            $this->bus->dispatch(new WarmAudioMessage($id));
+        }
+        $io->writeln(sprintf('В очередь на прогрев поставлено: %d. Запустите воркер: <info>messenger:consume async</info>', count($new)));
+
+        return Command::SUCCESS;
     }
 
-    /** Scans public/audio and inserts rows that are not in the DB yet. */
-    private function import(SymfonyStyle $io): int
+    /** @return int[] ids of newly created rows */
+    private function import(SymfonyStyle $io, Bot $bot, string $scanDir, string $prefix): array
     {
-        $finder = (new Finder())
-            ->files()
-            ->in($this->projectDir.'/public/audio')
-            ->name('/\.(mp3|wav|m4a)$/i')          // sources only — not the generated .ogg
-            ->sortByName();
+        $finder = (new Finder())->files()->in($scanDir)->name('/\.(mp3|wav|m4a)$/i')->sortByName();
 
-        // cache of existing artist|title keys
+        // existing keys for THIS bot only
         $exists = [];
         foreach (
-            $this->em->createQuery('SELECT a.title, a.artist FROM App\Entity\Audio a')
-                     ->getArrayResult() as $row
+            $this->em->createQuery('SELECT a.title, a.artist FROM App\Entity\Audio a WHERE a.bot = :bot')
+                     ->setParameter('bot', $bot->getId())->getArrayResult() as $row
         ) {
             $exists[self::makeKey($row['artist'], $row['title'])] = true;
         }
 
         $io->progressStart($finder->count());
-        $imported = 0;
-        $batch    = 0;
+        $new = [];
 
         foreach ($finder as $file) {
             $io->progressAdvance();
@@ -88,53 +108,28 @@ final class ImportAudioCommand extends Command
             }
             $exists[$key] = true;
 
-            $this->em->persist(
-                (new Audio())
-                    ->setTitle($title)
-                    ->setArtist($artist)
-                    ->setPath('audio/'.$file->getRelativePathname())
-            );
-            $imported++;
-
-            if ((++$batch % 200) === 0) {
-                $this->em->flush();
-                $this->em->clear();
-            }
+            $audio = (new Audio())
+                ->setBot($bot)
+                ->setTitle($title)
+                ->setArtist($artist)
+                ->setPath($prefix.'/'.$file->getRelativePathname())
+                ->setStatus(Audio::STATUS_PENDING);
+            $this->em->persist($audio);
+            $new[] = $audio;
         }
 
         $this->em->flush();
         $io->progressFinish();
 
-        return $imported;
+        return array_map(static fn(Audio $a) => (int) $a->getId(), $new);
     }
 
-    /** Uploads every not-yet-warmed audio once to obtain a reusable file_id. */
-    private function warmFileIds(SymfonyStyle $io): void
+    private function resolveBot(string $ref): ?Bot
     {
-        $pending = $this->em->getRepository(Audio::class)->findBy(['fileId' => null]);
-
-        if (!$pending) {
-            $io->writeln('Все file_id уже прогреты.');
-            return;
+        if (ctype_digit($ref)) {
+            return $this->bots->find((int) $ref);
         }
-
-        $io->section(sprintf('Прогрев file_id: %d шт.', count($pending)));
-        $io->progressStart(count($pending));
-        $ok = $failed = 0;
-
-        foreach ($pending as $audio) {
-            try {
-                $this->voiceSender->uploadAndGetFileId($audio);
-                $ok++;
-            } catch (\Throwable $e) {
-                $failed++;
-                $io->writeln(sprintf("\n<error>%s — %s</error>", $audio->getPath(), $e->getMessage()));
-            }
-            $io->progressAdvance();
-        }
-
-        $io->progressFinish();
-        $io->writeln(sprintf('Прогрев готов: ok=%d, ошибок=%d.', $ok, $failed));
+        return $this->bots->findOneBy(['username' => ltrim($ref, '@')]);
     }
 
     /** Case-insensitive key, trims a stray .ogg suffix. */

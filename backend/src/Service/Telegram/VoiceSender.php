@@ -1,7 +1,11 @@
 <?php
+
+declare(strict_types=1);
+
 namespace App\Service\Telegram;
 
 use App\Entity\Audio;
+use App\Entity\Bot;
 use Doctrine\ORM\EntityManagerInterface;
 use Longman\TelegramBot\Request;
 use Psr\Log\LoggerInterface;
@@ -9,48 +13,42 @@ use Symfony\Component\Process\Exception\ProcessFailedException;
 use Symfony\Component\Process\Process;
 
 /**
- * Converts a source file to OGG/Opus and uploads it once to the storage chat
- * to obtain a reusable Telegram file_id. Meant to run offline (import command),
- * NOT inside the inline-query hot path.
+ * Converts a source file to OGG/Opus and uploads it once to the bot's storage
+ * chat to obtain a reusable Telegram file_id. Runs offline (warming worker /
+ * import) — NEVER in the inline-query hot path. file_ids are per-bot.
  */
 final class VoiceSender
 {
     public function __construct(
         private readonly EntityManagerInterface $em,
+        private readonly TelegramClientFactory  $clients,
         private readonly string                 $publicDir,
-        private readonly TelegramService        $telegram, // ensures Request:: is initialized
         private readonly LoggerInterface        $ffmpegLogger,
-        private readonly int                    $storageChatId,
     ) {}
 
-    public function isConfigured(): bool
-    {
-        return $this->storageChatId !== 0;
-    }
-
-    /** Returns the cached file_id, uploading via the storage chat on first call. */
-    public function uploadAndGetFileId(Audio $audio): string
+    /** Returns the cached file_id, uploading via the bot's storage chat on first call. */
+    public function uploadAndGetFileId(Bot $bot, Audio $audio): string
     {
         if ($cached = $audio->getFileId()) {
             return $cached;
         }
 
-        if ($this->storageChatId === 0) {
-            throw new \RuntimeException(
-                'TELEGRAM_STORAGE_CHAT_ID is not configured — cannot upload to obtain a file_id.'
-            );
+        $storageChatId = $bot->getStorageChatId();
+        if (!$storageChatId) {
+            throw new \RuntimeException(sprintf('Bot "%s" has no storage_chat_id configured.', $bot->getUsername()));
         }
+
+        $this->clients->use($bot); // point the global Request facade at this bot
 
         $src = $this->publicDir.'/'.ltrim($audio->getPath(), '/');
         $dst = $src.'.ogg';
-
         if (!file_exists($dst)) {
             $this->convertToOpus($src, $dst);
         }
 
         /* Sent as AUDIO (two-line title/performer in the inline picker). */
         $resp = Request::sendAudio([
-            'chat_id'              => $this->storageChatId,
+            'chat_id'              => $storageChatId,
             'audio'                => Request::encodeFile($dst),
             'title'                => $audio->getTitle(),
             'performer'            => $audio->getArtist(),
@@ -62,22 +60,16 @@ final class VoiceSender
         }
 
         $result = $resp->getResult();
-
-        $fileId = $result->getAudio()?->getFileId()
-            ?? $result->getVoice()?->getFileId();
-
+        $fileId = $result->getAudio()?->getFileId() ?? $result->getVoice()?->getFileId();
         if (!$fileId) {
             throw new \RuntimeException('Cannot obtain file_id from sendAudio result');
         }
 
-        $audio->setFileId($fileId);
+        $audio->setFileId($fileId)->setStatus(Audio::STATUS_READY);
         $this->em->flush();
 
         /* Remove the technical upload message from the storage chat. */
-        Request::deleteMessage([
-            'chat_id'    => $this->storageChatId,
-            'message_id' => $result->getMessageId(),
-        ]);
+        Request::deleteMessage(['chat_id' => $storageChatId, 'message_id' => $result->getMessageId()]);
 
         return $fileId;
     }
@@ -86,7 +78,7 @@ final class VoiceSender
     {
         $cmd  = ['ffmpeg', '-i', $src, '-c:a', 'libopus', '-y', $dst];
         $proc = new Process($cmd);
-        $proc->setTimeout(30)->run();
+        $proc->setTimeout(60)->run();
 
         $this->ffmpegLogger->debug('ffmpeg', [
             'cmd'  => implode(' ', $cmd),
