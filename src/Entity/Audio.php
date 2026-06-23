@@ -8,6 +8,7 @@ use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity(repositoryClass: 'App\Repository\AudioRepository')]
 #[ORM\Table(name: 'audio')]
+#[ORM\Index(name: 'idx_audio_title_artist', columns: ['title', 'artist'], flags: ['fulltext'])]
 class Audio {
 
     #[ORM\Id]
