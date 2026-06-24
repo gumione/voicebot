@@ -30,6 +30,12 @@ final class AudioRepository extends ServiceEntityRepository
         return $qb;
     }
 
+    /** Only warmed rows (have a reusable file_id) — the only ones the inline can serve. */
+    private function warmedOnly(QueryBuilder $qb): QueryBuilder
+    {
+        return $qb->andWhere('a.fileId IS NOT NULL');
+    }
+
     /** FULLTEXT search with "#Artist" filter, boolean-then-natural fallback. */
     public function search(string $raw, int $limit, int $offset, ?int $botId = null): array
     {
@@ -52,6 +58,7 @@ final class AudioRepository extends ServiceEntityRepository
             ->setFirstResult($offset)
             ->setMaxResults($limit);
         $this->scopeBot($qb, $botId);
+        $this->warmedOnly($qb);
 
         if ($artist) {
             $qb->andWhere('a.artist LIKE :art')->setParameter('art', "%$artist%");
@@ -75,6 +82,7 @@ final class AudioRepository extends ServiceEntityRepository
             ->setFirstResult($offset)
             ->setMaxResults($limit);
         $this->scopeBot($qb, $botId);
+        $this->warmedOnly($qb);
 
         if ($artist) {
             $qb->andWhere('a.artist LIKE :art')->setParameter('art', "%$artist%");
@@ -147,6 +155,7 @@ final class AudioRepository extends ServiceEntityRepository
             ->setFirstResult($offset)
             ->setMaxResults($limit);
         $this->scopeBot($qb, $botId);
+        $this->warmedOnly($qb);
 
         return $qb->getQuery()->getResult();
     }
@@ -160,6 +169,7 @@ final class AudioRepository extends ServiceEntityRepository
         $qb = $this->createQueryBuilder('a')
             ->select("a.id AS id, CONCAT(a.title, ' ', a.artist) AS name");
         $this->scopeBot($qb, $botId);
+        $this->warmedOnly($qb);
 
         return $qb->getQuery()->getArrayResult();
     }

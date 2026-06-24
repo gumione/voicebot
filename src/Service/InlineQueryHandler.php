@@ -57,25 +57,26 @@ final class InlineQueryHandler
 
         $this->userService->ensure($inlineQuery->getFrom());
 
-        /* ---------- Search (exact → layout → fuzzy), scoped to this bot ---------- */
+        /* ---------- Search (exact → layout → fuzzy), scoped to this bot ----------
+           Fetch one extra row to know whether a next page exists. The repository
+           returns only warmed rows (file_id IS NOT NULL), so every result is
+           renderable and the offset stays exact across pages. */
+        $fetch = self::LIMIT + 1;
         if ($query !== '') {
-            $audios = $this->sampleSearch->search($query, self::LIMIT, $offset, $botId);
+            $audios = $this->sampleSearch->search($query, $fetch, $offset, $botId);
         } else {
-            $audios = $this->audioRepo->findAllPaginated(self::LIMIT, $offset, $botId);
+            $audios = $this->audioRepo->findAllPaginated($fetch, $offset, $botId);
         }
+
+        $hasMore = count($audios) > self::LIMIT;
+        $audios  = array_slice($audios, 0, self::LIMIT);
 
         /* ---------- Build results ---------- */
         $results = [];
         foreach ($audios as $audio) {
-            $fileId = $audio->getFileId();
-            if (!$fileId) {
-                $this->telegramLogger->warning('Audio without file_id skipped', ['id' => $audio->getId()]);
-                continue;
-            }
-
             $results[] = new InlineQueryResultCachedAudio([
                 'id'            => (string) $audio->getId(),
-                'audio_file_id' => $fileId,
+                'audio_file_id' => (string) $audio->getFileId(),
                 'title'         => $audio->getTitle(),
                 'performer'     => $audio->getArtist(),
             ]);
@@ -92,7 +93,7 @@ final class InlineQueryHandler
         }
 
         /* ---------- Answer ---------- */
-        $nextOffset = (count($results) >= self::LIMIT) ? (string) ($offset + self::LIMIT) : '';
+        $nextOffset = $hasMore ? (string) ($offset + self::LIMIT) : '';
 
         Request::answerInlineQuery([
             'inline_query_id' => $inlineQuery->getId(),
