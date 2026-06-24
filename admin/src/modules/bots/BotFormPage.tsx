@@ -80,8 +80,10 @@ const BotFormPage = () => {
         if (validate()) mutation.mutate();
     };
 
+    const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8123/admin/api';
+    const backendOrigin = new URL(apiBase, window.location.origin).origin;
     const webhookUrl = existing
-        ? `${window.location.origin}/bot/${existing.webhookToken}/webhook`
+        ? `${backendOrigin}/bot/${existing.webhookToken}/webhook`
         : '';
 
     const copyWebhook = async () => {
@@ -180,6 +182,7 @@ const BotFormPage = () => {
                         <p className="text-secondary/70 text-xs mt-2">
                             Register it with Telegram via <span className="font-medium">setWebhook</span>, passing{' '}
                             <code className="px-1 py-0.5 bg-neutral rounded">secret_token={existing.webhookToken}</code>.
+                            Telegram needs a <span className="font-medium">public HTTPS</span> host — swap in your tunnel/prod domain if this points at a local one.
                         </p>
                     </div>
                 )}
