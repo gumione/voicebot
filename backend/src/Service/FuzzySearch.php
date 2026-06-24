@@ -58,13 +58,32 @@ class FuzzySearch
         return array_slice(array_keys($best), 0, $limit);
     }
 
-    /** If $query is plain Latin, return it remapped to the RU layout; else null. */
+    /**
+     * Fix a wrong keyboard layout, BOTH directions:
+     *   Latin typed in RU layout   → Cyrillic ("rhfc"  → "крас")
+     *   Cyrillic typed in EN layout → Latin    ("ыфдге" → "salut")
+     * Direction is chosen from the query's script; null for mixed/empty/no-letters.
+     */
     public function swapLayout(string $query): ?string
     {
         $q = mb_strtolower(trim($query), 'UTF-8');
-        if ($q === '' || preg_match('/\p{Cyrillic}/u', $q) || !preg_match('/[a-z]/i', $q)) return null;
+        if ($q === '') return null;
+
+        $hasCyr = (bool) preg_match('/\p{Cyrillic}/u', $q);
+        $hasLat = (bool) preg_match('/[a-z]/i', $q);
+
+        if ($hasLat && !$hasCyr) {
+            $map = self::LAYOUT;              // EN keys → RU letters
+        } elseif ($hasCyr && !$hasLat) {
+            $map = array_flip(self::LAYOUT);  // RU letters → EN keys
+        } else {
+            return null;                      // mixed script or no letters — don't guess
+        }
+
         $out = '';
-        foreach ($this->chars($q) as $ch) $out .= self::LAYOUT[$ch] ?? $ch;
+        foreach ($this->chars($q) as $ch) {
+            $out .= $map[$ch] ?? $ch;
+        }
         return $out !== $q ? $out : null;
     }
 
