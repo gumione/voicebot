@@ -1,5 +1,5 @@
 monolog:
-  channels: ['telegram', 'ffmpeg']
+  channels: ['telegram', 'ffmpeg', 'deprecation']
   handlers:
     main:
       type: stream
