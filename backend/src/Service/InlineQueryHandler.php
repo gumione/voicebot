@@ -36,8 +36,16 @@ final class InlineQueryHandler
      */
     public function handle(Bot $bot, string $payload): void
     {
-        $update = new Update(json_decode($payload, true));
+        $data = json_decode($payload, true);
+        if (!is_array($data)) {
+            return;
+        }
+        $this->handleUpdate($bot, new Update($data));
+    }
 
+    /** Same logic, but for an already-parsed Update (used by the long-poll command). */
+    public function handleUpdate(Bot $bot, Update $update): void
+    {
         $inlineQuery = $update->getInlineQuery();
         if (!$inlineQuery) {
             return; // we only care about inline queries
