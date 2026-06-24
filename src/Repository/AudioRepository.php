@@ -130,8 +130,12 @@ final class AudioRepository extends ServiceEntityRepository
      * Admin listing for one bot: newest first, optional LIKE filter.
      * @return array{items: Audio[], total: int}
      */
-    public function adminPaginate(int $botId, int $page, int $perPage, string $search = ''): array
+    public function adminPaginate(int $botId, int $page, int $perPage, string $search = '', string $sort = 'id', string $order = 'desc'): array
     {
+        $sortable = ['id' => 'a.id', 'title' => 'a.title', 'artist' => 'a.artist', 'status' => 'a.status'];
+        $sortCol  = $sortable[$sort] ?? 'a.id';
+        $dir      = strtolower($order) === 'asc' ? 'ASC' : 'DESC';
+
         $base = $this->createQueryBuilder('a')
             ->where('a.bot = :bot')->setParameter('bot', $botId);
         if ($search !== '') {
@@ -139,12 +143,41 @@ final class AudioRepository extends ServiceEntityRepository
         }
 
         $total = (int) (clone $base)->select('COUNT(a.id)')->getQuery()->getSingleScalarResult();
-        $items = $base->orderBy('a.id', 'DESC')
+        $items = $base->orderBy($sortCol, $dir)->addOrderBy('a.id', 'DESC')
             ->setFirstResult(($page - 1) * $perPage)
             ->setMaxResults($perPage)
             ->getQuery()->getResult();
 
         return ['items' => $items, 'total' => $total];
+    }
+
+    /** @return array{pending:int, ready:int, failed:int, total:int} */
+    public function statusCounts(int $botId): array
+    {
+        $rows = $this->createQueryBuilder('a')
+            ->select('a.status AS status, COUNT(a.id) AS c')
+            ->where('a.bot = :bot')->setParameter('bot', $botId)
+            ->groupBy('a.status')
+            ->getQuery()->getArrayResult();
+
+        $out = ['pending' => 0, 'ready' => 0, 'failed' => 0, 'total' => 0];
+        foreach ($rows as $r) {
+            $out[$r['status']] = (int) $r['c'];
+            $out['total'] += (int) $r['c'];
+        }
+        return $out;
+    }
+
+    /** ids of samples not yet warmed (no file_id) — for bulk retry. @return int[] */
+    public function notWarmedIds(int $botId): array
+    {
+        return array_map('intval', array_column(
+            $this->createQueryBuilder('a')->select('a.id AS id')
+                ->where('a.bot = :bot')->setParameter('bot', $botId)
+                ->andWhere('a.fileId IS NULL')
+                ->getQuery()->getArrayResult(),
+            'id'
+        ));
     }
 
     /** @return Audio[] */

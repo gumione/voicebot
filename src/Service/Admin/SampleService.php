@@ -33,9 +33,55 @@ final class SampleService
     }
 
     /** @return array{items: Audio[], total: int} */
-    public function paginate(Bot $bot, int $page, int $perPage, string $search): array
+    public function paginate(Bot $bot, int $page, int $perPage, string $search, string $sort = 'id', string $order = 'desc'): array
     {
-        return $this->repo->adminPaginate((int) $bot->getId(), $page, $perPage, $search);
+        return $this->repo->adminPaginate((int) $bot->getId(), $page, $perPage, $search, $sort, $order);
+    }
+
+    /** @return array{pending:int, ready:int, failed:int, total:int} */
+    public function statusCounts(Bot $bot): array
+    {
+        return $this->repo->statusCounts((int) $bot->getId());
+    }
+
+    /** @param array<string,mixed> $data */
+    public function update(Bot $bot, int $id, array $data): Audio
+    {
+        $audio = $this->find($bot, $id);
+        if (array_key_exists('title', $data)) {
+            $title = trim((string) $data['title']);
+            if ($title === '') {
+                throw new BadRequestHttpException('title cannot be empty');
+            }
+            $audio->setTitle($title);
+        }
+        if (array_key_exists('artist', $data)) {
+            $audio->setArtist(trim((string) $data['artist']) ?: 'Unknown');
+        }
+        $this->em->flush();
+
+        return $audio;
+    }
+
+    /** Re-queue every not-yet-warmed sample of the bot. @return int number queued */
+    public function retryAll(Bot $bot): int
+    {
+        if (!$bot->getStorageChatId()) {
+            throw new BadRequestHttpException('Bot has no storage chat configured.');
+        }
+
+        $ids = $this->repo->notWarmedIds((int) $bot->getId());
+        if ($ids) {
+            $this->em->createQuery('UPDATE App\Entity\Audio a SET a.status = :p WHERE a.bot = :b AND a.fileId IS NULL')
+                ->setParameter('p', Audio::STATUS_PENDING)
+                ->setParameter('b', $bot->getId())
+                ->execute();
+            foreach ($ids as $id) {
+                $this->bus->dispatch(new WarmAudioMessage($id));
+            }
+        }
+
+        return count($ids);
     }
 
     public function upload(Bot $bot, UploadedFile $file, ?string $title, ?string $artist): Audio

@@ -22,17 +22,37 @@ final class SampleController extends AbstractController
         $bot     = $this->svc->bot($botId);
         $page    = max(1, (int) $r->query->get('page', 1));
         $perPage = min(100, max(1, (int) $r->query->get('per_page', 20)));
-        $res     = $this->svc->paginate($bot, $page, $perPage, trim((string) $r->query->get('search', '')));
+        $res     = $this->svc->paginate(
+            $bot, $page, $perPage,
+            trim((string) $r->query->get('search', '')),
+            (string) $r->query->get('sort', 'id'),
+            (string) $r->query->get('order', 'desc'),
+        );
 
         return $this->json([
             'data' => array_map(fn($a) => $this->svc->toArray($a), $res['items']),
             'meta' => [
-                'page'        => $page,
-                'per_page'    => $perPage,
-                'total'       => $res['total'],
-                'total_pages' => (int) ceil($res['total'] / $perPage),
+                'page'          => $page,
+                'per_page'      => $perPage,
+                'total'         => $res['total'],
+                'total_pages'   => (int) ceil($res['total'] / $perPage),
+                'status_counts' => $this->svc->statusCounts($bot),
             ],
         ]);
+    }
+
+    #[Route('/retry-all', name: 'admin_samples_retry_all', methods: ['POST'])]
+    public function retryAll(int $botId): JsonResponse
+    {
+        $queued = $this->svc->retryAll($this->svc->bot($botId));
+        return $this->json(['data' => ['queued' => $queued]]);
+    }
+
+    #[Route('/{id}', name: 'admin_samples_update', methods: ['PATCH'], requirements: ['id' => '\d+'])]
+    public function update(int $botId, int $id, Request $r): JsonResponse
+    {
+        $audio = $this->svc->update($this->svc->bot($botId), $id, json_decode($r->getContent(), true) ?? []);
+        return $this->json(['data' => $this->svc->toArray($audio)]);
     }
 
     #[Route('', name: 'admin_samples_upload', methods: ['POST'])]
